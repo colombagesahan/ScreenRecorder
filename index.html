@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Screen Recorder + Trim + MP3 Mixer (Single HTML)</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: #0b1020; color: #e6e9ff;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 18px; margin: 0 0 10px; }
+    .grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 420px 1fr; } }
+
+    .card {
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .row > * { flex: 0 0 auto; }
+    button {
+      background: #3b82f6; color: white; border: 0; border-radius: 12px;
+      padding: 10px 12px; font-weight: 650; cursor: pointer;
+    }
+    button.secondary { background: rgba(255,255,255,.12); }
+    button.danger { background: #ef4444; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    label { font-size: 13px; opacity: .9; }
+    input[type="number"], select, input[type="file"] {
+      background: rgba(255,255,255,.08);
+      color: #e6e9ff;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 10px;
+      padding: 8px 10px;
+      outline: none;
+    }
+    input[type="range"] { width: 100%; }
+    .tiny { font-size: 12px; opacity: .8; }
+    .status {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 12px;
+      padding: 10px;
+      height: 160px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+    video {
+      width: 100%;
+      background: #000;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 999px;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.10);
+      font-size: 12px;
+    }
+    a.download {
+      display: inline-block; margin-top: 10px;
+      color: white; text-decoration: none;
+      background: #22c55e;
+      padding: 10px 12px; border-radius: 12px; font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Screen Recorder → Trim → Add MP3 → Export Video (Single HTML)</h1>
+
+    <div class="grid">
+      <div class="card">
+        <div class="row" style="justify-content: space-between;">
+          <span class="pill">Works best on Chrome / Edge</span>
+          <span class="pill" id="secureHint">Checking…</span>
+        </div>
+
+        <hr style="border:0;border-top:1px solid rgba(255,255,255,.10);margin:12px 0;">
+
+        <div class="row">
+          <button id="btnStart">🎬 Start Screen Recording</button>
+          <button id="btnStop" class="danger" disabled>⏹ Stop</button>
+          <button id="btnClear" class="secondary" disabled>🧹 Clear</button>
+        </div>
+
+        <div style="height:10px"></div>
+
+        <div class="row">
+          <label class="pill">
+            <input type="checkbox" id="useMic" />
+            Include Mic (mixes with system audio)
+          </label>
+        </div>
+
+        <div style="height:10px"></div>
+
+        <div>
+          <label>Music MP3 (optional)</label><br/>
+          <input id="mp3File" type="file" accept="audio/mpeg,audio/mp3" />
+          <div class="tiny">Tip: choose a royalty-free MP3 to avoid copyright issues on YouTube/Facebook.</div>
+        </div>
+
+        <div style="height:10px"></div>
+
+        <div>
+          <label>Audio mode</label><br/>
+          <select id="audioMode">
+            <option value="mix">Mix MP3 with recorded audio</option>
+            <option value="replace">Replace recorded audio with MP3</option>
+          </select>
+        </div>
+
+        <div style="height:10px"></div>
+
+        <div>
+          <label>Export format</label><br/>
+          <select id="exportFormat">
+            <option value="webm">WebM (fast, YouTube accepts)</option>
+            <option value="mp4">MP4 (try — may fail on some builds)</option>
+          </select>
+          <div class="tiny">If MP4 fails, export WebM and upload (or convert with any converter).</div>
+        </div>
+
+        <hr style="border:0;border-top:1px solid rgba(255,255,255,.10);margin:12px 0;">
+
+        <div class="row">
+          <button id="btnLoadFfmpeg" class="secondary">⚙️ Load Video Editor</button>
+          <span class="tiny" id="ffmpegState">Editor not loaded</span>
+        </div>
+
+        <div style="height:10px"></div>
+
+        <div>
+          <label>Trim (seconds)</label>
+          <div class="row" style="margin-top:6px">
+            <div>
+              <label class="tiny">Start</label><br/>
+              <input id="trimStart" type="number" min="0" step="0.1" value="0">
+            </div>
+            <div>
+              <label class="tiny">End</label><br/>
+              <input id="trimEnd" type="number" min="0" step="0.1" value="0">
+            </div>
+            <div style="flex:1 1 auto">
+              <label class="tiny">Quick slider</label>
+              <input id="trimSlider" type="range" min="0" max="0" step="0.1" value="0">
+              <div class="tiny" id="durHint">Duration: —</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="row">
+          <button id="btnExport" disabled>✨ Trim + Add MP3 + Export</button>
+        </div>
+
+        <a id="downloadLink" class="download" style="display:none" download>⬇️ Download exported video</a>
+      </div>
+
+      <div class="card">
+        <label>Preview</label>
+        <video id="preview" controls playsinline></video>
+
+        <div style="height:12px"></div>
+        <label>Log</label>
+        <div class="status" id="log"></div>
+
+        <div class="tiny" style="margin-top:10px">
+          Upload steps: export → download file → open YouTube Studio / Facebook → upload video.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ffmpeg.wasm (loaded via CDN) -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/ffmpeg.min.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/util.min.js"></script>
+
+  <script>
+    // ---------- Helpers ----------
+    const $ = (id) => document.getElementById(id);
+
+    function log(msg) {
+      const el = $("log");
+      el.textContent += msg + "\n";
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function isSecureEnough() {
+      return location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    }
+
+    function clamp(n, min, max) {
+      return Math.max(min, Math.min(max, n));
+    }
+
+    // ---------- UI Elements ----------
+    const btnStart = $("btnStart");
+    const btnStop = $("btnStop");
+    const btnClear = $("btnClear");
+    const btnExport = $("btnExport");
+    const btnLoadFfmpeg = $("btnLoadFfmpeg");
+
+    const preview = $("preview");
+    const trimStart = $("trimStart");
+    const trimEnd = $("trimEnd");
+    const trimSlider = $("trimSlider");
+    const durHint = $("durHint");
+    const downloadLink = $("downloadLink");
+    const ffmpegState = $("ffmpegState");
+
+    // ---------- Recording State ----------
+    let recorder = null;
+    let chunks = [];
+    let recordedBlob = null;
+    let recordedUrl = null;
+
+    let displayStream = null;
+    let micStream = null;
+    let mixedStream = null;
+
+    // ---------- FFMPEG State ----------
+    let ffmpeg = null;
+    let ffmpegLoaded = false;
+
+    async function loadEditor() {
+      if (ffmpegLoaded) return;
+
+      const { createFFmpeg } = FFmpeg;
+      const { fetchFile } = FFmpegUtil;
+
+      ffmpegState.textContent = "Loading editor… (first time can take a bit)";
+      log("Loading ffmpeg.wasm editor…");
+
+      ffmpeg = createFFmpeg({
+        log: false,
+        corePath: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js",
+      });
+
+      ffmpeg.setProgress(({ ratio }) => {
+        const pct = Math.round(ratio * 100);
+        ffmpegState.textContent = `Editing… ${pct}%`;
+      });
+
+      await ffmpeg.load();
+      ffmpegLoaded = true;
+
+      ffmpegState.textContent = "Editor loaded ✅";
+      log("Editor loaded ✅");
+    }
+
+    // ---------- Audio mixing for recording (optional mic) ----------
+    async function getMixedStreamWithOptionalMic(screenStream, includeMic) {
+      const videoTracks = screenStream.getVideoTracks();
+
+      // If no audio at all and mic not requested, just return screen stream as-is.
+      const hasScreenAudio = screenStream.getAudioTracks().length > 0;
+
+      if (!includeMic && hasScreenAudio) {
+        return screenStream;
+      }
+      if (!includeMic && !hasScreenAudio) {
+        return new MediaStream([...videoTracks]);
+      }
+
+      // Need to mix audio tracks (screen audio + mic audio) using WebAudio.
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const destination = audioCtx.createMediaStreamDestination();
+
+      if (hasScreenAudio) {
+        const screenAudioSource = audioCtx.createMediaStreamSource(new MediaStream(screenStream.getAudioTracks()));
+        screenAudioSource.connect(destination);
+      }
+
+      if (includeMic) {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const micSource = audioCtx.createMediaStreamSource(micStream);
+        micSource.connect(destination);
+      }
+
+      const mixedAudioTracks = destination.stream.getAudioTracks();
+      return new MediaStream([...videoTracks, ...mixedAudioTracks]);
+    }
+
+    // ---------- Recording ----------
+    async function startRecording() {
+      if (!isSecureEnough()) {
+        alert("Screen recording needs HTTPS (or localhost). Please run this on https:// or http://localhost.");
+        return;
+      }
+
+      downloadLink.style.display = "none";
+      downloadLink.removeAttribute("href");
+      downloadLink.removeAttribute("download");
+
+      chunks = [];
+      recordedBlob = null;
+
+      try {
+        // Ask for screen capture
+        displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: 30 },
+          audio: true // user must enable "Share audio" in the chooser for system audio
+        });
+
+        mixedStream = await getMixedStreamWithOptionalMic(displayStream, $("useMic").checked);
+
+        // Choose a supported recording mimeType
+        const candidates = [
+          "video/webm;codecs=vp9,opus",
+          "video/webm;codecs=vp8,opus",
+          "video/webm;codecs=vp9",
+          "video/webm",
+        ];
+        const mimeType = candidates.find(t => MediaRecorder.isTypeSupported(t)) || "";
+
+        recorder = new MediaRecorder(mixedStream, mimeType ? { mimeType } : undefined);
+
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+
+        recorder.onstop = async () => {
+          recordedBlob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+          log(`Recorded blob: ${(recordedBlob.size / (1024*1024)).toFixed(2)} MB`);
+
+          if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+          recordedUrl = URL.createObjectURL(recordedBlob);
+          preview.src = recordedUrl;
+
+          // Wait for metadata to read duration
+          preview.onloadedmetadata = () => {
+            const dur = preview.duration || 0;
+            durHint.textContent = `Duration: ${dur.toFixed(2)}s`;
+
+            trimStart.value = "0";
+            trimEnd.value = dur.toFixed(2);
+
+            trimSlider.max = dur.toFixed(2);
+            trimSlider.value = dur.toFixed(2);
+
+            btnExport.disabled = !ffmpegLoaded; // need editor loaded to export
+            btnClear.disabled = false;
+          };
+
+          // Clean up tracks
+          stopAllTracks(displayStream);
+          stopAllTracks(micStream);
+          displayStream = null;
+          micStream = null;
+          mixedStream = null;
+        };
+
+        recorder.start(250); // timeslice for chunks
+        log("Recording started…");
+
+        btnStart.disabled = true;
+        btnStop.disabled = false;
+        btnClear.disabled = true;
+        btnExport.disabled = true;
+      } catch (err) {
+        console.error(err);
+        log("ERROR: " + (err?.message || err));
+        stopAllTracks(displayStream);
+        stopAllTracks(micStream);
+        displayStream = null;
+        micStream = null;
+        mixedStream = null;
+      }
+    }
+
+    function stopRecording() {
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+        log("Recording stopped.");
+      }
+      btnStop.disabled = true;
+      btnStart.disabled = false;
+    }
+
+    function stopAllTracks(stream) {
+      if (!stream) return;
+      stream.getTracks().forEach(t => t.stop());
+    }
+
+    function clearAll() {
+      if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+      recordedUrl = null;
+      recordedBlob = null;
+      preview.removeAttribute("src");
+      preview.load();
+      durHint.textContent = "Duration: —";
+      trimStart.value = "0";
+      trimEnd.value = "0";
+      trimSlider.max = "0";
+      trimSlider.value = "0";
+      downloadLink.style.display = "none";
+      btnClear.disabled = true;
+      btnExport.disabled = true;
+      log("Cleared.");
+    }
+
+    // ---------- Editing / Export ----------
+    async function exportEdited() {
+      if (!ffmpegLoaded) {
+        alert("Click 'Load Video Editor' first.");
+        return;
+      }
+      if (!recordedBlob) {
+        alert("Record something first.");
+        return;
+      }
+
+      const { fetchFile } = FFmpegUtil;
+
+      const start = Math.max(0, Number(trimStart.value || 0));
+      const end = Math.max(0, Number(trimEnd.value || 0));
+
+      const duration = preview.duration || 0;
+      const safeStart = clamp(start, 0, Math.max(0, duration));
+      const safeEnd = clamp(end, 0, Math.max(0, duration));
+      if (safeEnd <= safeStart + 0.01) {
+        alert("Trim end must be greater than trim start.");
+        return;
+      }
+
+      const mp3 = $("mp3File").files?.[0] || null;
+      const audioMode = $("audioMode").value; // mix or replace
+      const exportFormat = $("exportFormat").value; // webm or mp4
+
+      btnExport.disabled = true;
+      btnStart.disabled = true;
+      btnStop.disabled = true;
+      btnClear.disabled = true;
+
+      downloadLink.style.display = "none";
+
+      try {
+        log("Preparing files for ffmpeg…");
+
+        // Clean old FS files if any
+        const safeUnlink = (p) => { try { ffmpeg.FS("unlink", p); } catch {} };
+        ["input.webm","trimmed.webm","music.mp3","out.webm","out.mp4"].forEach(safeUnlink);
+
+        // Write input
+        ffmpeg.FS("writeFile", "input.webm", await fetchFile(recordedBlob));
+
+        // Step 1: Trim (re-encode to make trimming accurate)
+        // Using VP8/Opus keeps it widely compatible.
+        log(`Trimming: ${safeStart.toFixed(2)}s → ${safeEnd.toFixed(2)}s`);
+        await ffmpeg.run(
+          "-ss", String(safeStart),
+          "-to", String(safeEnd),
+          "-i", "input.webm",
+          "-c:v", "libvpx",
+          "-crf", "30",
+          "-b:v", "0",
+          "-c:a", "libopus",
+          "-b:a", "128k",
+          "trimmed.webm"
+        );
+
+        const trimLen = safeEnd - safeStart;
+
+        // Step 2: If MP3 provided, add it
+        if (mp3) {
+          log(`Adding MP3 (${audioMode})…`);
+          ffmpeg.FS("writeFile", "music.mp3", await fetchFile(mp3));
+
+          if (audioMode === "replace") {
+            // Replace audio with MP3 (loop if shorter, cut to video duration)
+            await ffmpeg.run(
+              "-i", "trimmed.webm",
+              "-stream_loop", "-1",
+              "-i", "music.mp3",
+              "-t", String(trimLen),
+              "-map", "0:v:0",
+              "-map", "1:a:0",
+              "-c:v", "copy",
+              "-c:a", "libopus",
+              "-shortest",
+              "out.webm"
+            );
+          } else {
+            // Mix recorded audio + MP3 (loop MP3 if shorter, cut to video duration)
+            await ffmpeg.run(
+              "-i", "trimmed.webm",
+              "-stream_loop", "-1",
+              "-i", "music.mp3",
+              "-t", String(trimLen),
+              "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2[a]",
+              "-map", "0:v:0",
+              "-map", "[a]",
+              "-c:v", "copy",
+              "-c:a", "libopus",
+              "-shortest",
+              "out.webm"
+            );
+          }
+        } else {
+          // No MP3 — just use trimmed output
+          log("No MP3 selected. Exporting trimmed video only…");
+          await ffmpeg.run(
+            "-i", "trimmed.webm",
+            "-c:v", "copy",
+            "-c:a", "copy",
+            "out.webm"
+          );
+        }
+
+        // Step 3: Export WebM or try MP4
+        let outName = "out.webm";
+        if (exportFormat === "mp4") {
+          log("Trying MP4 export… (may fail on some ffmpeg builds)");
+          try {
+            await ffmpeg.run(
+              "-i", "out.webm",
+              "-c:v", "libx264",
+              "-preset", "veryfast",
+              "-crf", "23",
+              "-c:a", "aac",
+              "-b:a", "160k",
+              "out.mp4"
+            );
+            outName = "out.mp4";
+            log("MP4 export success ✅");
+          } catch (e) {
+            log("MP4 export failed. Falling back to WebM.");
+            outName = "out.webm";
+          }
+        }
+
+        // Read the output and make it downloadable
+        const data = ffmpeg.FS("readFile", outName);
+        const outBlob = new Blob([data.buffer], {
+          type: outName.endsWith(".mp4") ? "video/mp4" : "video/webm"
+        });
+        const outUrl = URL.createObjectURL(outBlob);
+
+        // Update preview to exported clip
+        preview.src = outUrl;
+
+        downloadLink.href = outUrl;
+        downloadLink.download = outName.endsWith(".mp4") ? "exported.mp4" : "exported.webm";
+        downloadLink.style.display = "inline-block";
+
+        log(`Done ✅ Exported ${(outBlob.size/(1024*1024)).toFixed(2)} MB`);
+      } catch (err) {
+        console.error(err);
+        log("ERROR: " + (err?.message || err));
+        alert("Export failed. Check the log. (Tip: Try WebM export, shorter video, or smaller screen area.)");
+      } finally {
+        btnExport.disabled = false;
+        btnStart.disabled = false;
+        btnStop.disabled = true;
+        btnClear.disabled = false;
+        ffmpegState.textContent = ffmpegLoaded ? "Editor loaded ✅" : "Editor not loaded";
+      }
+    }
+
+    // ---------- UI Wiring ----------
+    btnStart.addEventListener("click", startRecording);
+    btnStop.addEventListener("click", stopRecording);
+    btnClear.addEventListener("click", clearAll);
+
+    btnLoadFfmpeg.addEventListener("click", async () => {
+      btnLoadFfmpeg.disabled = true;
+      try { await loadEditor(); }
+      finally {
+        btnLoadFfmpeg.disabled = false;
+        // enable export if we already recorded something
+        btnExport.disabled = !(ffmpegLoaded && recordedBlob);
+      }
+    });
+
+    btnExport.addEventListener("click", exportEdited);
+
+    // Trim slider: controls END time quickly
+    trimSlider.addEventListener("input", () => {
+      trimEnd.value = Number(trimSlider.value).toFixed(2);
+    });
+
+    // Keep slider synced if user edits end manually
+    trimEnd.addEventListener("input", () => {
+      trimSlider.value = trimEnd.value || "0";
+    });
+
+    // Secure hint
+    $("secureHint").textContent = isSecureEnough() ? "HTTPS/Local ✅" : "Needs HTTPS/localhost ⚠️";
+
+    log("Ready. 1) Load Video Editor 2) Start recording 3) Stop 4) Trim + add MP3 5) Export.");
+  </script>
+</body>
+</html>
